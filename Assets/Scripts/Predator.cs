@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Chase the closest prey inside the predator's forward view cone.
+/// Chase the closest prey inside the predator's forward view cone.
 public class Predator : Agent
 {
     [SerializeField] private float fieldOfViewAngle = 120f;

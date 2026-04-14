@@ -1,32 +1,28 @@
 using UnityEngine;
 
-// Shared movement code for prey and predator.
+/// Shared movement code for prey and predator.
 public class Agent : MonoBehaviour
 {
     private static readonly float[] WallTurnAngles = { -150f, -120f, -90f, -60f, -30f, 30f, 60f, 90f, 120f, 150f, 180f };
-
-    public float speed = 5f;
-    public float detectionRadius = 8f;
+    public float speed = 5.0f;
+    private readonly float detectionRadius = 6.0f;
     public Vector3 heading;
-
-    [SerializeField] private float wanderSpeedMultiplier = 0.5f;
-    [SerializeField] private float minTurnInterval = 0.6f;
-    [SerializeField] private float maxTurnInterval = 1.6f;
-    [SerializeField] private float maxTurnAngle = 55f;
-    [SerializeField] private float collisionProbeRadius = 0.35f;
-    [SerializeField] private float wallProbeDistance = 1.2f;
-    [SerializeField] private float probeHeight = 0.5f;
-    [SerializeField] private float rotationSpeed = 540f;
-    [SerializeField] private float wallTurnLockDuration = 0.3f;
+    private readonly float wanderSpeedMultiplier = 0.4f;
+    private readonly float minTurnInterval = 0.6f;
+    private readonly float maxTurnInterval = 1.6f;
+    private readonly float maxTurnAngle = 55.0f;
+    private readonly float collisionProbeRadius = 0.35f;
+    private readonly float wallProbeDistance = 1.2f;
+    private readonly float probeHeight = 0.5f;
+    private readonly float rotationSpeed = 540f;
+    private readonly float wallTurnLockDuration = 0.3f;
 
     private float nextTurnTime;
     private float forcedTurnUntil;
     private Vector3 forcedTurnHeading;
     private Rigidbody rb;
 
-    /// <summary>
     /// Initializes movement state and assigns a random starting direction when none is set.
-    /// </summary>
     protected virtual void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -40,9 +36,7 @@ public class Agent : MonoBehaviour
         ScheduleNextTurn();
     }
 
-    /// <summary>
     /// Applies wandering behavior with periodic random turns and early wall avoidance.
-    /// </summary>
     protected void MoveWander()
     {
         // If a wall is directly ahead, pick a new direction first.
@@ -66,11 +60,9 @@ public class Agent : MonoBehaviour
         MoveInHeading(wanderSpeedMultiplier);
     }
 
-    /// <summary>
     /// Moves the agent in its current heading and redirects if a wall is detected ahead.
-    /// </summary>
     /// <param name="speedMultiplier">Multiplier applied to the base movement speed.</param>
-    protected void MoveInHeading(float speedMultiplier = 1f)
+    protected void MoveInHeading(float speedMultiplier = 1.0f)
     {
         Vector3 moveDirection = Time.time < forcedTurnUntil ? forcedTurnHeading : heading;
         moveDirection = FlatNormalized(moveDirection);
@@ -99,9 +91,7 @@ public class Agent : MonoBehaviour
         RotateToHeading();
     }
 
-    /// <summary>
     /// Forces an immediate turn when the agent physically collides with a wall.
-    /// </summary>
     /// <param name="collision">The collision reported by Unity physics.</param>
     protected virtual void OnCollisionEnter(Collision collision)
     {
@@ -131,10 +121,8 @@ public class Agent : MonoBehaviour
         RotateToHeading();
     }
 
-    /// <summary>
     /// Finds the nearest agent of type T within detection range.
     /// Use a smaller fovAngle for forward vision, or 360 for all-around vision.
-    /// </summary>
     protected Transform GetClosestTargetInRange<T>(float fovAngle = 360f) where T : Agent
     {
         Collider[] hits = Physics.OverlapSphere(transform.position, detectionRadius);
@@ -183,9 +171,7 @@ public class Agent : MonoBehaviour
         return closest;
     }
 
-    /// <summary>
     /// Chooses the turn direction with the most free space from a fixed set of escape angles.
-    /// </summary>
     /// <param name="origin">Probe origin for clearance tests.</param>
     /// <param name="currentDirection">Current forward direction.</param>
     /// <param name="probeDistance">Base distance used to test open space.</param>
@@ -224,9 +210,7 @@ public class Agent : MonoBehaviour
         return bestClearance > collisionProbeRadius * 0.1f;
     }
 
-    /// <summary>
     /// Detects a nearby wall during wandering and triggers a turn before contact.
-    /// </summary>
     private bool TryNudgeAwayFromWall()
     {
         Vector3 currentDirection = FlatNormalized(heading);
@@ -245,9 +229,7 @@ public class Agent : MonoBehaviour
         return TryGetWallTurnDirection(probeOrigin, currentDirection, probeDistance, out _);
     }
 
-    /// <summary>
     /// Measures how far the agent can move in a direction before hitting an obstacle.
-    /// </summary>
     private float MeasureClearance(Vector3 origin, Vector3 direction, float maxDistance)
     {
         if (TrySphereCast(origin, direction, maxDistance, out RaycastHit hit))
@@ -258,9 +240,7 @@ public class Agent : MonoBehaviour
         return maxDistance;
     }
 
-    /// <summary>
     /// Locks the agent into a new heading briefly so it can clear the wall it just avoided.
-    /// </summary>
     private void ApplyForcedTurn(Vector3 direction)
     {
         direction = FlatNormalized(direction);
@@ -275,9 +255,7 @@ public class Agent : MonoBehaviour
         ScheduleNextTurn();
     }
 
-    /// <summary>
     /// Treats any non-agent collider as a wall or obstacle.
-    /// </summary>
     private bool ShouldTreatAsObstacle(Collider collider)
     {
         if (collider == null || collider.transform.IsChildOf(transform))
@@ -294,9 +272,7 @@ public class Agent : MonoBehaviour
         return true;
     }
 
-    /// <summary>
     /// Sphere casts forward and returns the closest obstacle hit.
-    /// </summary>
     private bool TrySphereCast(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
     {
         RaycastHit[] hits = Physics.SphereCastAll(
@@ -330,9 +306,7 @@ public class Agent : MonoBehaviour
         return foundObstacle;
     }
 
-    /// <summary>
     /// Rotates the model so it faces its current heading on the XZ plane.
-    /// </summary>
     protected void RotateToHeading()
     {
         Vector3 flatHeading = FlatNormalized(heading);
@@ -345,9 +319,7 @@ public class Agent : MonoBehaviour
         transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
     }
 
-    /// <summary>
-    /// Schedules the next random wander turn within the configured interval range.
-    /// </summary>
+    /// Schedules the next random turn.
     private void ScheduleNextTurn()
     {
         float minInterval = Mathf.Max(0.05f, minTurnInterval);
@@ -355,26 +327,20 @@ public class Agent : MonoBehaviour
         nextTurnTime = Time.time + Random.Range(minInterval, maxInterval);
     }
 
-    /// <summary>
-    /// Returns the elevated origin used for wall-detection probes.
-    /// </summary>
+    /// Returns the origin used for wall-detection probes.
     private Vector3 GetProbeOrigin()
     {
         return transform.position + Vector3.up * probeHeight;
     }
 
-    /// <summary>
     /// Computes the forward probe length based on speed and the minimum wall distance.
-    /// </summary>
     private float GetProbeDistance(float speedMultiplier)
     {
         float speedDistance = speed * Mathf.Max(0.1f, speedMultiplier) * 0.35f;
         return Mathf.Max(wallProbeDistance, collisionProbeRadius + speedDistance);
     }
 
-    /// <summary>
     /// Writes velocity to the rigidbody if one is attached.
-    /// </summary>
     private void SetVelocity(Vector3 velocity)
     {
         if (rb != null)
@@ -383,9 +349,7 @@ public class Agent : MonoBehaviour
         }
     }
 
-    /// <summary>
     /// Removes vertical motion and returns a normalized XZ direction.
-    /// </summary>
     private static Vector3 FlatNormalized(Vector3 direction)
     {
         direction.y = 0f;
@@ -397,9 +361,7 @@ public class Agent : MonoBehaviour
         return direction.normalized;
     }
 
-    /// <summary>
     /// Creates a random normalized direction on the XZ plane.
-    /// </summary>
     private static Vector3 RandomFlatDirection()
     {
         Vector2 random = Random.insideUnitCircle.normalized;
