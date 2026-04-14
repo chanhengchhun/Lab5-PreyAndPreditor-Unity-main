@@ -1,12 +1,13 @@
 using UnityEngine;
 
+// Chase the closest prey inside the predator's forward view cone.
 public class Predator : Agent
 {
-    public Transform preyParent;
+    [SerializeField] private float fieldOfViewAngle = 120f;
 
-    private void Update()
+    private void FixedUpdate()
     {
-        Transform targetPrey = GetClosestTargetInRange(preyParent);
+        Transform targetPrey = GetClosestTargetInRange<Prey>(fieldOfViewAngle);
         if (targetPrey == null)
         {
             MoveWander();
@@ -27,12 +28,8 @@ public class Predator : Agent
     {
         base.OnCollisionEnter(collision);
 
-        if (collision == null)
-        {
-            return;
-        }
-
-        Prey prey = collision.collider.GetComponentInParent<Prey>();
+        // A prey is removed as soon as the predator makes contact.
+        Prey prey = collision?.collider.GetComponentInParent<Prey>();
         if (prey != null)
         {
             Destroy(prey.gameObject);

@@ -1,18 +1,18 @@
 using UnityEngine;
 
+// Shared movement code for prey and predator.
 public class Agent : MonoBehaviour
 {
     private static readonly float[] WallTurnAngles = { -150f, -120f, -90f, -60f, -30f, 30f, 60f, 90f, 120f, 150f, 180f };
 
     public float speed = 5f;
-    public float detectionRadius = 0.5f;
+    public float detectionRadius = 8f;
     public Vector3 heading;
 
     [SerializeField] private float wanderSpeedMultiplier = 0.5f;
     [SerializeField] private float minTurnInterval = 0.6f;
     [SerializeField] private float maxTurnInterval = 1.6f;
     [SerializeField] private float maxTurnAngle = 55f;
-    [SerializeField] protected LayerMask obstacleMask;
     [SerializeField] private float collisionProbeRadius = 0.35f;
     [SerializeField] private float wallProbeDistance = 1.2f;
     [SerializeField] private float probeHeight = 0.5f;
@@ -24,6 +24,9 @@ public class Agent : MonoBehaviour
     private Vector3 forcedTurnHeading;
     private Rigidbody rb;
 
+    /// <summary>
+    /// Initializes movement state and assigns a random starting direction when none is set.
+    /// </summary>
     protected virtual void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -37,8 +40,12 @@ public class Agent : MonoBehaviour
         ScheduleNextTurn();
     }
 
+    /// <summary>
+    /// Applies wandering behavior with periodic random turns and early wall avoidance.
+    /// </summary>
     protected void MoveWander()
     {
+        // If a wall is directly ahead, pick a new direction first.
         if (Time.time >= forcedTurnUntil && TryNudgeAwayFromWall())
         {
             MoveInHeading(wanderSpeedMultiplier);
@@ -59,6 +66,10 @@ public class Agent : MonoBehaviour
         MoveInHeading(wanderSpeedMultiplier);
     }
 
+    /// <summary>
+    /// Moves the agent in its current heading and redirects if a wall is detected ahead.
+    /// </summary>
+    /// <param name="speedMultiplier">Multiplier applied to the base movement speed.</param>
     protected void MoveInHeading(float speedMultiplier = 1f)
     {
         Vector3 moveDirection = Time.time < forcedTurnUntil ? forcedTurnHeading : heading;
@@ -73,6 +84,8 @@ public class Agent : MonoBehaviour
         {
             Vector3 probeOrigin = GetProbeOrigin();
             float probeDistance = GetProbeDistance(speedMultiplier);
+
+            // Probe ahead and redirect before we push into a wall.
             if (TrySphereCast(probeOrigin, moveDirection, probeDistance, out _) &&
                 !TryGetWallTurnDirection(probeOrigin, moveDirection, probeDistance, out moveDirection))
             {
@@ -86,6 +99,10 @@ public class Agent : MonoBehaviour
         RotateToHeading();
     }
 
+    /// <summary>
+    /// Forces an immediate turn when the agent physically collides with a wall.
+    /// </summary>
+    /// <param name="collision">The collision reported by Unity physics.</param>
     protected virtual void OnCollisionEnter(Collision collision)
     {
         if (collision == null || Time.time < forcedTurnUntil)
@@ -114,44 +131,73 @@ public class Agent : MonoBehaviour
         RotateToHeading();
     }
 
-    protected Transform GetClosestTargetInRange(Transform parent)
+    /// <summary>
+    /// Finds the nearest agent of type T within detection range.
+    /// Use a smaller fovAngle for forward vision, or 360 for all-around vision.
+    /// </summary>
+    protected Transform GetClosestTargetInRange<T>(float fovAngle = 360f) where T : Agent
     {
-        if (parent == null)
-        {
-            return null;
-        }
-
+        Collider[] hits = Physics.OverlapSphere(transform.position, detectionRadius);
         Transform closest = null;
-        float closestDistanceSquared = detectionRadius * detectionRadius;
+        float closestDistSq = float.MaxValue;
+        float halfFov = fovAngle * 0.5f;
 
-        foreach (Transform child in parent)
+        foreach (Collider col in hits)
         {
-            if (child == null || !child.gameObject.activeInHierarchy)
+            T agent = col.GetComponentInParent<T>();
+            if (agent == null || agent.transform == transform)
             {
                 continue;
             }
 
-            Vector3 offset = child.position - transform.position;
+            if (!agent.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            Vector3 offset = agent.transform.position - transform.position;
             offset.y = 0f;
-            float distanceSquared = offset.sqrMagnitude;
-            if (distanceSquared > closestDistanceSquared)
+            if (offset.sqrMagnitude < 0.001f)
             {
                 continue;
             }
 
-            closestDistanceSquared = distanceSquared;
-            closest = child;
+            // Skip the angle check when the agent has full 360 vision.
+            if (halfFov < 180f)
+            {
+                float angle = Vector3.Angle(transform.forward, offset);
+                if (angle > halfFov)
+                {
+                    continue;
+                }
+            }
+
+            float distSq = offset.sqrMagnitude;
+            if (distSq < closestDistSq)
+            {
+                closestDistSq = distSq;
+                closest = agent.transform;
+            }
         }
 
         return closest;
     }
 
+    /// <summary>
+    /// Chooses the turn direction with the most free space from a fixed set of escape angles.
+    /// </summary>
+    /// <param name="origin">Probe origin for clearance tests.</param>
+    /// <param name="currentDirection">Current forward direction.</param>
+    /// <param name="probeDistance">Base distance used to test open space.</param>
+    /// <param name="turnDirection">Selected turn direction when a valid path is found.</param>
+    /// <returns>True when a usable wall-avoidance direction is found.</returns>
     private bool TryGetWallTurnDirection(Vector3 origin, Vector3 currentDirection, float probeDistance, out Vector3 turnDirection)
     {
         float bestClearance = -1f;
         Vector3 bestDirection = Vector3.zero;
         int randomStart = Random.Range(0, WallTurnAngles.Length);
 
+        // Try several turn angles and keep the direction with the most open space.
         for (int i = 0; i < WallTurnAngles.Length; i++)
         {
             int index = (randomStart + i) % WallTurnAngles.Length;
@@ -178,6 +224,9 @@ public class Agent : MonoBehaviour
         return bestClearance > collisionProbeRadius * 0.1f;
     }
 
+    /// <summary>
+    /// Detects a nearby wall during wandering and triggers a turn before contact.
+    /// </summary>
     private bool TryNudgeAwayFromWall()
     {
         Vector3 currentDirection = FlatNormalized(heading);
@@ -196,6 +245,9 @@ public class Agent : MonoBehaviour
         return TryGetWallTurnDirection(probeOrigin, currentDirection, probeDistance, out _);
     }
 
+    /// <summary>
+    /// Measures how far the agent can move in a direction before hitting an obstacle.
+    /// </summary>
     private float MeasureClearance(Vector3 origin, Vector3 direction, float maxDistance)
     {
         if (TrySphereCast(origin, direction, maxDistance, out RaycastHit hit))
@@ -206,6 +258,9 @@ public class Agent : MonoBehaviour
         return maxDistance;
     }
 
+    /// <summary>
+    /// Locks the agent into a new heading briefly so it can clear the wall it just avoided.
+    /// </summary>
     private void ApplyForcedTurn(Vector3 direction)
     {
         direction = FlatNormalized(direction);
@@ -220,6 +275,9 @@ public class Agent : MonoBehaviour
         ScheduleNextTurn();
     }
 
+    /// <summary>
+    /// Treats any non-agent collider as a wall or obstacle.
+    /// </summary>
     private bool ShouldTreatAsObstacle(Collider collider)
     {
         if (collider == null || collider.transform.IsChildOf(transform))
@@ -227,23 +285,27 @@ public class Agent : MonoBehaviour
             return false;
         }
 
+        // Other agents are not walls.
         if (collider.GetComponentInParent<Agent>() != null)
         {
             return false;
         }
 
-        if (obstacleMask.value == 0)
-        {
-            return true;
-        }
-
-        return (obstacleMask.value & (1 << collider.gameObject.layer)) != 0;
+        return true;
     }
 
+    /// <summary>
+    /// Sphere casts forward and returns the closest obstacle hit.
+    /// </summary>
     private bool TrySphereCast(Vector3 origin, Vector3 direction, float distance, out RaycastHit hit)
     {
-        int castMask = obstacleMask.value == 0 ? Physics.DefaultRaycastLayers : obstacleMask.value;
-        RaycastHit[] hits = Physics.SphereCastAll(origin, collisionProbeRadius, direction, distance, castMask, QueryTriggerInteraction.Ignore);
+        RaycastHit[] hits = Physics.SphereCastAll(
+            origin,
+            collisionProbeRadius,
+            direction,
+            distance,
+            Physics.DefaultRaycastLayers,
+            QueryTriggerInteraction.Ignore);
 
         float closestDistance = float.PositiveInfinity;
         RaycastHit closestHit = default;
@@ -268,6 +330,9 @@ public class Agent : MonoBehaviour
         return foundObstacle;
     }
 
+    /// <summary>
+    /// Rotates the model so it faces its current heading on the XZ plane.
+    /// </summary>
     protected void RotateToHeading()
     {
         Vector3 flatHeading = FlatNormalized(heading);
@@ -280,6 +345,9 @@ public class Agent : MonoBehaviour
         transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
     }
 
+    /// <summary>
+    /// Schedules the next random wander turn within the configured interval range.
+    /// </summary>
     private void ScheduleNextTurn()
     {
         float minInterval = Mathf.Max(0.05f, minTurnInterval);
@@ -287,17 +355,26 @@ public class Agent : MonoBehaviour
         nextTurnTime = Time.time + Random.Range(minInterval, maxInterval);
     }
 
+    /// <summary>
+    /// Returns the elevated origin used for wall-detection probes.
+    /// </summary>
     private Vector3 GetProbeOrigin()
     {
         return transform.position + Vector3.up * probeHeight;
     }
 
+    /// <summary>
+    /// Computes the forward probe length based on speed and the minimum wall distance.
+    /// </summary>
     private float GetProbeDistance(float speedMultiplier)
     {
         float speedDistance = speed * Mathf.Max(0.1f, speedMultiplier) * 0.35f;
         return Mathf.Max(wallProbeDistance, collisionProbeRadius + speedDistance);
     }
 
+    /// <summary>
+    /// Writes velocity to the rigidbody if one is attached.
+    /// </summary>
     private void SetVelocity(Vector3 velocity)
     {
         if (rb != null)
@@ -306,6 +383,9 @@ public class Agent : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Removes vertical motion and returns a normalized XZ direction.
+    /// </summary>
     private static Vector3 FlatNormalized(Vector3 direction)
     {
         direction.y = 0f;
@@ -317,6 +397,9 @@ public class Agent : MonoBehaviour
         return direction.normalized;
     }
 
+    /// <summary>
+    /// Creates a random normalized direction on the XZ plane.
+    /// </summary>
     private static Vector3 RandomFlatDirection()
     {
         Vector2 random = Random.insideUnitCircle.normalized;

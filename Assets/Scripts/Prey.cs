@@ -1,12 +1,13 @@
 using UnityEngine;
 
+// Flee from the closest predator in range.
 public class Prey : Agent
 {
-    public Transform predatorParent;
+    [SerializeField] private float fleeSpeedMultiplier = 1.3f;
 
-    private void Update()
+    private void FixedUpdate()
     {
-        Transform threat = GetClosestTargetInRange(predatorParent);
+        Transform threat = GetClosestTargetInRange<Predator>();
         if (threat == null)
         {
             MoveWander();
@@ -20,6 +21,6 @@ public class Prey : Agent
             heading = fleeDirection.normalized;
         }
 
-        MoveInHeading();
+        MoveInHeading(fleeSpeedMultiplier);
     }
 }
