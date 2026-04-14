@@ -2,115 +2,40 @@ using UnityEngine;
 
 public class Predator : Agent
 {
-    // Drag the EMPTY parent object "Preys" here in the Inspector
     public Transform preyParent;
-    
-    [SerializeField] private float visionAngle = 90f;
-    [SerializeField] private bool showDebugRays = true;
 
-    void Update()
+    private void Update()
     {
-        // Find the specific prey that is closest right now AND in field of view
-        Transform targetPrey = (preyParent != null && preyParent.childCount > 0) ? GetClosestPreyInFOV() : null;
-
-        if (targetPrey != null)
-        {
-            float distance = Vector3.Distance(transform.position, targetPrey.position);
-
-            if (distance < detectionRadius)
-            {
-                // Chase Logic toward the closest prey
-                heading = (targetPrey.position - transform.position).normalized;
-                MoveInHeading();
-            }
-            else
-            {
-                // Wander Logic goes here
-                MoveWander();
-            }
-        }
-        else
+        Transform targetPrey = GetClosestTargetInRange(preyParent);
+        if (targetPrey == null)
         {
             MoveWander();
+            return;
         }
-    }
 
-    /// <summary>
-    /// Find closest prey that is within field of view and line of sight.
-    /// </summary>
-    Transform GetClosestPreyInFOV()
-    {
-        Transform closest = null;
-        float closestDistance = Mathf.Infinity;
-
-        foreach (Transform childPrey in preyParent)
+        Vector3 chaseDirection = targetPrey.position - transform.position;
+        chaseDirection.y = 0f;
+        if (chaseDirection.sqrMagnitude > 0.001f)
         {
-            float distanceToChild = Vector3.Distance(transform.position, childPrey.position);
-            
-            // Check distance first
-            if (distanceToChild > detectionRadius)
-            {
-                continue;
-            }
-
-            // Check if in field of view
-            Vector3 directionToPrey = (childPrey.position - transform.position).normalized;
-            float angleTowardsPrey = Vector3.Angle(heading, directionToPrey);
-
-            if (angleTowardsPrey > visionAngle * 0.5f)
-            {
-                if (showDebugRays)
-                {
-                    Debug.DrawLine(transform.position, childPrey.position, Color.red, 0.01f);
-                }
-                continue;
-            }
-
-            // Check line of sight
-            Ray rayToPrey = new Ray(transform.position + Vector3.up * 0.5f, directionToPrey);
-            bool blocked = Physics.Raycast(rayToPrey, distanceToChild, obstacleMask);
-
-            if (showDebugRays)
-            {
-                Color rayColor = blocked ? Color.red : Color.green;
-                Debug.DrawLine(transform.position, childPrey.position, rayColor, 0.01f);
-            }
-
-            if (blocked)
-            {
-                continue;
-            }
-
-            // This prey is visible!
-            if (distanceToChild < closestDistance)
-            {
-                closestDistance = distanceToChild;
-                closest = childPrey;
-            }
+            heading = chaseDirection.normalized;
         }
 
-        return closest;
+        MoveInHeading();
     }
 
-    /// <summary>
-    /// Draw FOV cone in Scene view for debugging.
-    /// </summary>
-    private void OnDrawGizmosSelected()
+    protected override void OnCollisionEnter(Collision collision)
     {
-        if (!showDebugRays) return;
+        base.OnCollisionEnter(collision);
 
-        Gizmos.color = Color.yellow;
-        float halfAngle = visionAngle * 0.5f;
-        
-        // Draw two rays for FOV boundaries
-        Vector3 leftBound = Quaternion.Euler(0f, -halfAngle, 0f) * heading;
-        Vector3 rightBound = Quaternion.Euler(0f, halfAngle, 0f) * heading;
+        if (collision == null)
+        {
+            return;
+        }
 
-        Gizmos.DrawLine(transform.position, transform.position + leftBound * detectionRadius);
-        Gizmos.DrawLine(transform.position, transform.position + rightBound * detectionRadius);
-            Gizmos.DrawLine(
-                transform.position + leftBound * detectionRadius,
-                transform.position + rightBound * detectionRadius
-            );
+        Prey prey = collision.collider.GetComponentInParent<Prey>();
+        if (prey != null)
+        {
+            Destroy(prey.gameObject);
+        }
     }
 }

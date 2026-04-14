@@ -2,28 +2,24 @@ using UnityEngine;
 
 public class Prey : Agent
 {
-    public Transform predator;
-    
-    // Update is called once per frame
-    void Update()
+    public Transform predatorParent;
+
+    private void Update()
     {
-        bool predatorDetected = false;
-        if (predator != null)
+        Transform threat = GetClosestTargetInRange(predatorParent);
+        if (threat == null)
         {
-            float distance = Vector3.Distance(transform.position, predator.position);
-            predatorDetected = distance < detectionRadius;
+            MoveWander();
+            return;
         }
 
-        if (predatorDetected)
+        Vector3 fleeDirection = transform.position - threat.position;
+        fleeDirection.y = 0f;
+        if (fleeDirection.sqrMagnitude > 0.001f)
         {
-            // flee logic
-            heading = (transform.position - predator.position).normalized;
-            MoveInHeading();
+            heading = fleeDirection.normalized;
         }
-        else
-        {
-            // wander logic
-            MoveWander();
-        }
+
+        MoveInHeading();
     }
 }
